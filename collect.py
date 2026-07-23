@@ -13,6 +13,7 @@ from playwright.sync_api import sync_playwright
 import config
 from core.browser import open_profile
 from core.period import last_completed_week, parse_week
+from core.report import render_console, write_summary_csv, write_summary_md
 from core.result import ChannelResult, write_result
 
 
@@ -60,7 +61,7 @@ def main() -> int:
     out_dir = config.OUT_DIR / week
     print(f"Период: {week} ({start} — {end})")
 
-    summary = {}
+    results = []
     with sync_playwright() as pw:
         ctx = open_profile(pw)
         for name in names:
@@ -73,13 +74,15 @@ def main() -> int:
                     period_from=start.isoformat(), period_to=end.isoformat(),
                     status="failed", error=f"{type(e).__name__}: {e}")
             write_result(res, out_dir)
-            summary[name] = res.status
+            results.append(res)
         ctx.close()
 
-    print("\n=== Итог ===")
-    for name, status in summary.items():
-        print(f"  {name:8s} {status}")
-    return 0 if all(s == "ok" for s in summary.values()) else 1
+    # Читаемая сводка в консоль + файлы summary.md / summary.csv
+    print(render_console(results, week, start, end, out_dir))
+    write_summary_md(results, week, start, end, out_dir)
+    csv_path = write_summary_csv(results, week, out_dir)
+    print(f"Сводка: {csv_path.parent / 'summary.md'} · {csv_path}")
+    return 0 if all(r.status == "ok" for r in results) else 1
 
 
 if __name__ == "__main__":
