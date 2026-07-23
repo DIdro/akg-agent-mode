@@ -54,6 +54,14 @@ def _read_period_text(page) -> str:
         return ""
 
 
+def _period_matches(wanted: str, actual: str) -> bool:
+    """Совпадает ли запрошенный период (например «13.07–19.07») с тем, что
+    реально показано в шапке дашборда (нормализуем дефис/en-dash)."""
+    if not actual:
+        return False
+    return wanted in actual.replace("-", "–")
+
+
 def _dashboard_load_failed(page) -> bool:
     """ВК иногда рендерит явный баннер отказа вместо данных (перегрузка/rate-limit
     на его стороне) — отличаем это от "просто ещё грузится", чтобы не врать в
@@ -90,16 +98,30 @@ def _shoot_and_extract(page, shot_path: Path, expected: dict) -> tuple[dict, boo
 # подсказки) — это легко упирается в собственный rate-limit ВК
 # ("Too many requests per second") и мешает как раз нужному getOwnerStats.
 # Блокируем этот шум на уровне запросов страницы — статистике он не нужен.
+#
+# ВАЖНО: statsDashboard.* (getOwnerStats/getDashboardSections/getBootstrapData)
+# и batch.call НИКОГДА не блокируются — это либо сама нужная статистика, либо
+# может её нести (батч рискованно фильтровать по имени метода). Список ниже —
+# только те методы, что реально видели в разведке как чистый шум.
 _NOISE_PATTERNS = (
-    "method/queue.subscribe", "method/stickers.", "method/vmoji.",
-    "method/messages.", "method/eventHub.", "method/store.hasNewItems",
-    "method/account.getHelpHints", "method/account.getTogglesExternal",
-    "method/batch.call", "ad.mail.ru", "stats.vk-portal.net",
+    "method/stickers.", "method/messages.", "method/vmoji.",
+    "method/queue.subscribe", "method/store.hasNewItems", "queuev4",
 )
 
 
+def _is_noise(url: str) -> bool:
+    """Чистая проверка: блокировать ли запрос как несвязанный со статистикой шум.
+    statsDashboard.* и batch.call — защищены (никогда не блокируются), т.к. это
+    сама нужная статистика или может её нести."""
+    if "statsDashboard" in url:
+        return False
+    if "batch.call" in url:
+        return False
+    return any(p in url for p in _NOISE_PATTERNS)
+
+
 def _block_noise(route):
-    if any(p in route.request.url for p in _NOISE_PATTERNS):
+    if _is_noise(route.request.url):
         route.abort()
     else:
         route.continue_()
@@ -116,19 +138,28 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
     page.route("https://web.api.vk.ru/**", _block_noise)
     warnings = []
     try:
-        page.goto(f"{base}?sectionId=top_community&subsectionId=stat_board_general",
-                   wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
-        if "groups/dashboard" not in page.url:
-            res.status = "auth_required"
-            res.error = "Сессия ВК истекла — запустите collect.py --login"
-            return res
-
         # У nppsatek нет вкладки «Канал» (VK Видео-канал) — фиксируем None,
         # без похода на несуществующую вкладку.
         res.metrics["channel_views"] = None
 
-        actual_period = _read_period_text(page)
+        actual_period = ""
+        try:
+            page.goto(f"{base}?sectionId=top_community&subsectionId=stat_board_general",
+                       wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+            if "groups/dashboard" not in page.url:
+                # Реальный редирект с дашборда (не таймаут) — это истёкшая
+                # сессия, а не rate-limit; тут действительно нечего собирать.
+                res.status = "auth_required"
+                res.error = "Сессия ВК истекла — запустите collect.py --login"
+                return res
+            actual_period = _read_period_text(page)
+        except Exception as e:
+            # Бутстрап-навигация упала (таймаут под rate-limit и т.п.), но это
+            # НЕ признак истёкшей сессии — не валим весь канал, каждая вкладка
+            # ниже сама делает свою навигацию и может восстановиться.
+            warnings.append(f"bootstrap goto: {type(e).__name__}: {e}")
+            res.needs_review = True
 
         for section_id, subsection_id, shot_name, expected in TABS:
             try:
@@ -158,7 +189,7 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
                 res.needs_review = True
 
         wanted = f"{start:%d.%m}–{end:%d.%m}"
-        if not actual_period or wanted not in actual_period.replace("-", "–"):
+        if not _period_matches(wanted, actual_period):
             warnings.append(
                 f"дашборд показывает период по умолчанию «{actual_period or '?'}», "
                 f"а не запрошенную неделю {wanted} — календарь ВК не выставляли "
@@ -167,6 +198,13 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
 
         if warnings:
             res.error = "; ".join(warnings)
+
+        # Полная потеря данных (все метрики, кроме заведомо-None channel_views,
+        # так и остались None) — это не "частично деградировавший, но живой"
+        # сбор, а провал; см. прецедент channels/dzen.py.
+        collected_keys = [k for k in res.metrics if k != "channel_views"]
+        if collected_keys and all(res.metrics[k] is None for k in collected_keys) and res.error:
+            res.status = "failed"
         return res
     finally:
         page.close()
