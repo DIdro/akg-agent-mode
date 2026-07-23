@@ -23,7 +23,10 @@ def parse_metric_value(raw: str) -> int | None:
     m = re.fullmatch(r"([\d\s]+(?:[.,]\d+)?)\s*([KkКкMmМм]?)", s)
     if not m:
         return None
-    num = float(m.group(1).replace(" ", "").replace(",", "."))
+    try:
+        num = float(m.group(1).replace(" ", "").replace(",", "."))
+    except ValueError:
+        return None
     mult = _MULT.get(m.group(2).lower(), 1)
     return int(round(num * mult))
 

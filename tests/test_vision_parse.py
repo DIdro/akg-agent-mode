@@ -15,6 +15,7 @@ from vision import parse_metric_value, extract_metrics
     ("—", None),
     ("", None),
     ("N/A", None),
+    ("500\n3", None),        # внутренний перенос строки — не чистое число
 ])
 def test_parse_metric_value(raw, expected):
     assert parse_metric_value(raw) == expected

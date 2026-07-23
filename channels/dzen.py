@@ -20,6 +20,21 @@ def _ms(d, end=False):
     return int(datetime.combine(d, t, tzinfo=MSK).timestamp() * 1000)
 
 
+def _aggregate_posts(rows: list, typ: str) -> list[dict]:
+    """Чистая функция: строки XLSX (одного типа publications-stat) -> список
+    постов с числовыми метриками по COLS. rows — полный список строк листа
+    ([title, header, totals, посты...]); использует rows[3:]."""
+    posts = []
+    for row in rows[3:]:
+        if len(row) <= max(COLS.values()):
+            continue
+        post = {k: int(float(row[i] or 0)) for k, i in COLS.items()}
+        post["title"] = row[2] if len(row) > 2 else ""
+        post["type"] = typ
+        posts.append(post)
+    return posts
+
+
 def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
     res = ChannelResult(channel="dzen", week=week,
                         period_from=start.isoformat(), period_to=end.isoformat())
@@ -79,12 +94,7 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
             blob = r.body()
             (out_dir / f"dzen_{typ}.xlsx").write_bytes(blob)
             rows = parse_xlsx(blob)
-            for row in rows[3:]:   # [title, header, totals, посты...]
-                if len(row) <= max(COLS.values()):
-                    continue
-                post = {k: int(float(row[i] or 0)) for k, i in COLS.items()}
-                post["title"] = row[2] if len(row) > 2 else ""
-                post["type"] = typ
+            for post in _aggregate_posts(rows, typ):
                 posts.append(post)
                 for k in totals:
                     totals[k] += post[k]
@@ -99,13 +109,22 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
             # даже если по другому типу данные есть и status остаётся "ok".
             res.needs_review = True
 
-        # Подписчики — с публичной страницы канала (по спеке)
-        from vision import parse_metric_value
-        page.goto(config.CHANNELS["dzen"]["public_url"], wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
-        sub_m = re.search(r"([\d\s.,]+\s*[KkКкMmМм]?)\s*подписчик",
-                          page.inner_text("body"))
-        res.metrics["subscribers"] = parse_metric_value(sub_m.group(1)) if sub_m else None
+        # Подписчики — с публичной страницы канала (по спеке). Собранные выше
+        # XLSX-метрики уже лежат в res — сбой этого блока (таймаут goto,
+        # некорректный parse_metric_value) не должен их обнулять, поэтому
+        # весь блок в try/except, а не unguarded.
+        try:
+            from vision import parse_metric_value
+            page.goto(config.CHANNELS["dzen"]["public_url"], wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+            sub_m = re.search(r"(\d[\d.,  ]*[KkКкMmМм]?)\s*подписчик",
+                              page.inner_text("body"))
+            res.metrics["subscribers"] = parse_metric_value(sub_m.group(1)) if sub_m else None
+        except Exception as e:
+            res.metrics["subscribers"] = None
+            res.needs_review = True
+            warn = f"подписчики не собраны: {type(e).__name__}: {e}"
+            res.error = f"{res.error}; {warn}" if res.error else warn
 
         if not posts and res.error:
             res.status = "failed"

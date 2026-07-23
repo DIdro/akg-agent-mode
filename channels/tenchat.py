@@ -127,7 +127,19 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
         if "json" in captured:
             res.metrics = map_stats_json(captured["json"])
             res.source = "xhr"
-            if any(v is None for v in res.metrics.values()):
+            if all(v is None for v in res.metrics.values()):
+                # JSON пойман, но ни одно ожидаемое поле не распозналось
+                # (другая версия API/имена полей) — не сдаёмся сразу в failed,
+                # пробуем снять те же метрики через vision по уже сделанному
+                # скриншоту панели.
+                warnings.append(
+                    f"account/stats JSON не содержал ожидаемых ключей: {captured['json']!r}"
+                    " — фолбэк на vision")
+                res.metrics, needs_review = extract_metrics(shot, EXPECTED)
+                res.source = "vision"
+                if needs_review:
+                    warnings.append("vision тоже не распознал все метрики")
+            elif any(v is None for v in res.metrics.values()):
                 warnings.append(
                     f"account/stats JSON не содержал ожидаемых ключей: {captured['json']!r}")
         else:
