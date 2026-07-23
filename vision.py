@@ -6,6 +6,7 @@ extract_metrics — скриншот + список ожидаемых метр�
 import base64
 import json
 import re
+import sys
 from pathlib import Path
 
 import anthropic
@@ -51,44 +52,49 @@ _SCHEMA = {
 
 def extract_metrics(image_path: Path, expected: dict[str, str]) -> tuple[dict, bool]:
     """expected: {'content_reach': 'Охват контента за период', ...}
-    Возвращает ({key: int|None}, needs_review)."""
-    client = anthropic.Anthropic()
-    img_b64 = base64.standard_b64encode(image_path.read_bytes()).decode()
-    media = "image/png" if image_path.suffix == ".png" else "image/jpeg"
-    ask = "\n".join(f"- key={k}: {v}" for k, v in expected.items())
+    Возвращает ({key: int|None}, needs_review).
+    На любой ошибке деградирует gracefully: возвращает все метрики=None + needs_review=True."""
+    try:
+        client = anthropic.Anthropic()
+        img_b64 = base64.standard_b64encode(image_path.read_bytes()).decode()
+        media = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
+        ask = "\n".join(f"- key={k}: {v}" for k, v in expected.items())
 
-    resp = client.messages.create(
-        model=MODEL,
-        max_tokens=2000,
-        output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "image",
-                 "source": {"type": "base64", "media_type": media, "data": img_b64}},
-                {"type": "text", "text": (
-                    "На скриншоте — вкладка статистики соцсети. Найди значения метрик:\n"
-                    f"{ask}\n"
-                    "Верни raw_value РОВНО как на экране (например «17,6K», «16 000»). "
-                    "Если метрики на скриншоте нет — found=false, raw_value=''. "
-                    "Не пересчитывай и не округляй.")},
-            ],
-        }],
-    )
-    text = next(b.text for b in resp.content if b.type == "text")
-    data = json.loads(text)
+        resp = client.messages.create(
+            model=MODEL,
+            max_tokens=2000,
+            output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image",
+                     "source": {"type": "base64", "media_type": media, "data": img_b64}},
+                    {"type": "text", "text": (
+                        "На скриншоте — вкладка статистики соцсети. Найди значения метрик:\n"
+                        f"{ask}\n"
+                        "Верни raw_value РОВНО как на экране (например «17,6K», «16 000»). "
+                        "Если метрики на скриншоте нет — found=false, raw_value=''. "
+                        "Не пересчитывай и не округляй.")},
+                ],
+            }],
+        )
+        text = next(b.text for b in resp.content if b.type == "text")
+        data = json.loads(text)
 
-    metrics: dict = {}
-    needs_review = False
-    got = {m["key"]: m for m in data["metrics"]}
-    for key in expected:
-        item = got.get(key)
-        if not item or not item["found"]:
-            metrics[key] = None
-            needs_review = True
-            continue
-        val = parse_metric_value(item["raw_value"])
-        metrics[key] = val
-        if val is None:
-            needs_review = True
-    return metrics, needs_review
+        metrics: dict = {}
+        needs_review = False
+        got = {m["key"]: m for m in data["metrics"]}
+        for key in expected:
+            item = got.get(key)
+            if not item or not item["found"]:
+                metrics[key] = None
+                needs_review = True
+                continue
+            val = parse_metric_value(item["raw_value"])
+            metrics[key] = val
+            if val is None:
+                needs_review = True
+        return metrics, needs_review
+    except Exception as e:
+        print(f"vision: extraction failed: {type(e).__name__}: {e}", file=sys.stderr)
+        return {key: None for key in expected}, True
