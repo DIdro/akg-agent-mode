@@ -1,13 +1,26 @@
-"""Единый персистентный браузер-профиль (Яндекс.Браузер). Все каналы работают в нём."""
+"""Единый персистентный браузер-профиль. Все каналы работают в нём.
+
+Браузер: config.BROWSER_EXECUTABLE, если такой файл есть (Яндекс.Браузер на
+машинах с Amnezia — в обход VPN); иначе встроенный playwright-chromium.
+"""
+from pathlib import Path
+
 from playwright.sync_api import BrowserContext
 from config import PROFILE_DIR, BROWSER_EXECUTABLE
+
+
+def _resolve_executable() -> str | None:
+    """Путь к браузеру, если файл существует, иначе None → bundled chromium."""
+    if BROWSER_EXECUTABLE and Path(BROWSER_EXECUTABLE).exists():
+        return BROWSER_EXECUTABLE
+    return None
 
 
 def open_profile(pw, headless: bool = False) -> BrowserContext:
     PROFILE_DIR.mkdir(exist_ok=True)
     ctx = pw.chromium.launch_persistent_context(
         user_data_dir=str(PROFILE_DIR),
-        executable_path=BROWSER_EXECUTABLE,
+        executable_path=_resolve_executable(),
         headless=headless,
         viewport={"width": 1440, "height": 900},
         locale="ru-RU",

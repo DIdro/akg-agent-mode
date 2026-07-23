@@ -5,6 +5,7 @@ Playwright-автоматизация съёма статистики из ли�
 
 Дизайн: [docs/superpowers/specs/2026-07-23-akg-agent-mode-design.md](docs/superpowers/specs/2026-07-23-akg-agent-mode-design.md)
 Разведка кабинетов: [docs/recon/](docs/recon/) (dzen / vk / tenchat).
+**Развёртывание на новой машине (клиент): [SETUP.md](SETUP.md).**
 
 ## Запуск
 
