@@ -9,7 +9,7 @@ _CT = """<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/pa
 <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
 </Types>"""
 
-# Колонки: A=0 B=1 C=2(title) D=3 E=4(reads) F=5(shows) G=6(opens) H=7(time_min)
+# Колонки: A=0 B=1(тип) C=2(title) D=3 E=4(reads) F=5(shows) G=6(opens) H=7(time_min)
 # I=8(comments) J=9(subs) K=10(likes) — совпадает с COLS в channels/dzen.py.
 # row 1: заголовок отчёта, row 2: шапка колонок, row 3: строка "Всего",
 # rows 4-5: два поста (аггрегация читает rows[3:], т.е. индексы 2..4 списка).
@@ -18,6 +18,7 @@ _SHEET = """<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats
 <row r="2"><c r="A2" t="str"><v>Дата</v></c><c r="C2" t="str"><v>Заголовок</v></c></row>
 <row r="3"><c r="A3" t="str"><v>Всего</v></c></row>
 <row r="4">
+<c r="B4" t="str"><v>Статья</v></c>
 <c r="C4" t="str"><v>Пост 1</v></c>
 <c r="E4"><v>10</v></c>
 <c r="F4"><v>100</v></c>
@@ -28,6 +29,7 @@ _SHEET = """<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats
 <c r="K4"><v>5</v></c>
 </row>
 <row r="5">
+<c r="B5" t="str"><v>Пост</v></c>
 <c r="C5" t="str"><v>Пост 2</v></c>
 <c r="E5"><v>20</v></c>
 <c r="F5"><v>200</v></c>
@@ -50,12 +52,14 @@ def _fake_dzen_xlsx() -> bytes:
 
 def test_aggregate_posts_sums_across_two_posts():
     rows = parse_xlsx(_fake_dzen_xlsx())
-    posts = _aggregate_posts(rows, "article")
+    posts = _aggregate_posts(rows)
 
     assert len(posts) == 2
     assert posts[0]["title"] == "Пост 1"
     assert posts[1]["title"] == "Пост 2"
-    assert all(p["type"] == "article" for p in posts)
+    # Тип публикации берётся из колонки B каждой строки
+    assert posts[0]["type"] == "Статья"
+    assert posts[1]["type"] == "Пост"
 
     totals = {k: 0 for k in COLS}
     for post in posts:
@@ -74,7 +78,7 @@ def test_aggregate_posts_sums_across_two_posts():
 
 def test_aggregate_posts_coerces_fractional_time_min_without_crashing():
     rows = parse_xlsx(_fake_dzen_xlsx())
-    posts = _aggregate_posts(rows, "brief")
+    posts = _aggregate_posts(rows)
 
     # Строка поста 1 несёт дробное значение "1.5" в колонке time_min —
     # int(float(...)) должен обрезать его до 1, а не упасть.

@@ -7,7 +7,12 @@
 - Страница статистики публикаций:
   `https://dzen.ru/profile/editor/id/<publisherId>/publications-stat?statType=publications&intervalType=custom&intervalStart=<ms>&intervalEnd=<ms>`
   (title «Статистика | Дзен», в HTML есть `"csrfToken":"<hex:hex>"`).
-- Экспорт XLSX (тот же, что у Маши): `GET https://dzen.ru/editor-api/v2/publisher-publications-rich-stat-xls?intervalStart=<ms>&intervalEnd=<ms>&publisherId=<publisherId>&type=<article|brief>` с заголовком `X-Csrf-Token: <csrf>` + `Referer: <stat-url>`. Отдаёт `application/vnd.ms-excel` (article ~7КБ, brief ~5КБ на этом канале).
+- ⚠️ **Периодный экспорт XLSX (правильный, сверено 24.07):**
+  `GET https://dzen.ru/editor-api/v2/publisher-publications-rich-stat-xls?incomePublicationType=all&filterType=by-event&publisherId=<publisherId>&from=<YYYY-MM-DD>&to=<YYYY-MM-DD>`
+  с `X-Csrf-Token: <csrf>` + `Referer: <stat-url>`. **`filterType=by-event`** = события за период (как строка «Всего за N дней» и кнопка «Отчёт» в UI). `incomePublicationType=all` — все типы в одном файле (не нужны отдельные article/brief). Даты — YYYY-MM-DD, не ms.
+  Сверка W29 (13–19.07): строка «Всего» = дочитывания 5, показы 87, открытия 6, лайки 18 — совпадает с суммой постов нашего парсера и с UI.
+- ❌ **Прежний вариант (НЕПРАВИЛЬНЫЙ — lifetime):** `?intervalStart=<ms>&intervalEnd=<ms>&type=<article|brief>` (без `filterType`) отдавал НАКОПЛЕННУЮ за всё время статистику по постам. Её сумма завышала недельные показы в десятки раз (5225 вместо 87). Не использовать.
+- Также есть JSON period-API `editor-api/v2/publisher/<pub>/stats2?from=&to=&fields=…&total=true` (не кодифицирован — параметры fields капризны, дают 400 при неверном наборе; XLSX by-event проще и точнее).
 
 ## ⚠️ Два условия доступа (важно при переносе)
 1. **Только headed.** В headless-режиме Студия редиректит на публичную страницу и csrf не находится. `collect.py` всегда headed — ок.

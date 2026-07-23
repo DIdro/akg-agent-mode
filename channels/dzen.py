@@ -1,28 +1,28 @@
-"""Дзен: XLSX «Статистика публикаций» из Студии через живой профиль."""
+"""Дзен: XLSX «Статистика публикаций» из Студии через живой профиль.
+
+ВАЖНО про источник (сверено 2026-07-24): берём отчёт «по дате события» —
+endpoint rich-stat-xls с filterType=by-event&from=<дата>&to=<дата>. Он отдаёт
+события ЗА ПЕРИОД (как строка «Всего за N дней» и кнопка «Отчёт» в UI Студии).
+НЕ путать с прежним вариантом ?intervalStart=<ms>&intervalEnd=<ms>&type=…,
+который отдавал LIFETIME-статистику по постам (накопленную за всё время) —
+её сумма завышала недельные показы в десятки раз.
+"""
 import re
-from datetime import datetime, time, timezone, timedelta
 from pathlib import Path
 
 from core.result import ChannelResult
 from core.xlsx import parse_xlsx
 import config
 
-MSK = timezone(timedelta(hours=3))
-TYPES = ["article", "brief"]
 # Колонки XLSX Студии: 0=дата 1=тип 2=заголовок 3=url 4=дочитывания 5=показы
 # 6=открытия 7=время(мин) 8=комментарии 9=подписки 10=лайки
 COLS = {"reads": 4, "shows": 5, "opens": 6, "time_min": 7,
         "comments": 8, "subs": 9, "likes": 10}
 
 
-def _ms(d, end=False):
-    t = time(23, 59, 59) if end else time(0, 0, 0)
-    return int(datetime.combine(d, t, tzinfo=MSK).timestamp() * 1000)
-
-
-def _aggregate_posts(rows: list, typ: str) -> list[dict]:
-    """Чистая функция: строки XLSX (одного типа publications-stat) -> список
-    постов с числовыми метриками по COLS. rows — полный список строк листа
+def _aggregate_posts(rows: list) -> list[dict]:
+    """Чистая функция: строки XLSX publications-stat -> список постов с
+    числовыми метриками по COLS. rows — полный список строк листа
     ([title, header, totals, посты...]); использует rows[3:]."""
     posts = []
     for row in rows[3:]:
@@ -30,7 +30,7 @@ def _aggregate_posts(rows: list, typ: str) -> list[dict]:
             continue
         post = {k: int(float(row[i] or 0)) for k, i in COLS.items()}
         post["title"] = row[2] if len(row) > 2 else ""
-        post["type"] = typ
+        post["type"] = row[1] if len(row) > 1 else ""
         posts.append(post)
     return posts
 
@@ -44,8 +44,7 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
     page = ctx.new_page()
     try:
         stat_url = (f"https://dzen.ru/profile/editor/id/{pub}/publications-stat"
-                    f"?statType=publications&intervalType=custom"
-                    f"&intervalStart={_ms(start)}&intervalEnd={_ms(end, True)}")
+                    f"?statType=publications")
         page.goto(stat_url, wait_until="domcontentloaded")
         page.wait_for_timeout(3000)
         if "passport" in page.url or "/login" in page.url:
@@ -73,41 +72,32 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
             return res
         csrf = csrf_m.group(1)
 
+        # Отчёт «по дате события» за период [start, end] — один файл на все типы
+        # публикаций (incomePublicationType=all). Даты в формате YYYY-MM-DD.
         totals = {k: 0 for k in COLS}
         posts = []
-        errors = []
-        type_failed = False
-        for typ in TYPES:
-            url = (f"https://dzen.ru/editor-api/v2/publisher-publications-rich-stat-xls"
-                   f"?intervalStart={_ms(start)}&intervalEnd={_ms(end, True)}"
-                   f"&publisherId={pub}&type={typ}")
-            try:
-                r = ctx.request.get(url, headers={"X-Csrf-Token": csrf, "Referer": stat_url})
-            except Exception as e:
-                type_failed = True
-                errors.append(f"xlsx[{typ}] {e}")
-                continue
-            if r.status != 200:
-                type_failed = True
-                errors.append(f"xlsx[{typ}] HTTP {r.status}")
-                continue
-            blob = r.body()
-            (out_dir / f"dzen_{typ}.xlsx").write_bytes(blob)
-            rows = parse_xlsx(blob)
-            for post in _aggregate_posts(rows, typ):
-                posts.append(post)
-                for k in totals:
-                    totals[k] += post[k]
+        url = (f"https://dzen.ru/editor-api/v2/publisher-publications-rich-stat-xls"
+               f"?incomePublicationType=all&filterType=by-event&publisherId={pub}"
+               f"&from={start:%Y-%m-%d}&to={end:%Y-%m-%d}")
+        try:
+            r = ctx.request.get(url, headers={"X-Csrf-Token": csrf, "Referer": stat_url})
+        except Exception as e:
+            res.status, res.error = "failed", f"xlsx-отчёт: {type(e).__name__}: {e}"
+            return res
+        if r.status != 200:
+            res.status, res.error = "failed", f"xlsx-отчёт HTTP {r.status}"
+            return res
+        blob = r.body()
+        (out_dir / "dzen_by_event.xlsx").write_bytes(blob)
+        rows = parse_xlsx(blob)
+        for post in _aggregate_posts(rows):
+            posts.append(post)
+            for k in totals:
+                totals[k] += post[k]
 
         res.metrics = {**totals, "posts_count": len(posts)}
         res.metrics["posts"] = posts
         res.source = "xlsx"
-        if errors:
-            res.error = "; ".join(errors)
-        if type_failed:
-            # Часть типов (article/brief) не собралась — метрики неполные,
-            # даже если по другому типу данные есть и status остаётся "ok".
-            res.needs_review = True
 
         # Подписчики — с публичной страницы канала (по спеке). Собранные выше
         # XLSX-метрики уже лежат в res — сбой этого блока (таймаут goto,
