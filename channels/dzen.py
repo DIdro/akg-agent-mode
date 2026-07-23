@@ -37,6 +37,16 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
             res.status = "auth_required"
             res.error = "Сессия Дзена истекла — запустите collect.py --login"
             return res
+        # Бывает, что вместо passport/login недостаточная сессия тихо
+        # редиректит на публичную страницу канала (dzen.ru/id/...), а не на
+        # логин — ловим это до проверки csrfToken, чтобы дать понятную
+        # причину, а не "csrfToken не найден".
+        if "publications-stat" not in page.url:
+            page.screenshot(path=str(out_dir / "dzen_auth_redirect.png"), full_page=True)
+            res.screenshots.append("dzen_auth_redirect.png")
+            res.status = "auth_required"
+            res.error = "Сессия Дзена истекла — запустите collect.py --login"
+            return res
         page.screenshot(path=str(out_dir / "dzen_stats.png"), full_page=True)
         res.screenshots.append("dzen_stats.png")
 
@@ -50,13 +60,21 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
 
         totals = {k: 0 for k in COLS}
         posts = []
+        errors = []
+        type_failed = False
         for typ in TYPES:
             url = (f"https://dzen.ru/editor-api/v2/publisher-publications-rich-stat-xls"
                    f"?intervalStart={_ms(start)}&intervalEnd={_ms(end, True)}"
                    f"&publisherId={pub}&type={typ}")
-            r = ctx.request.get(url, headers={"X-Csrf-Token": csrf, "Referer": stat_url})
+            try:
+                r = ctx.request.get(url, headers={"X-Csrf-Token": csrf, "Referer": stat_url})
+            except Exception as e:
+                type_failed = True
+                errors.append(f"xlsx[{typ}] {e}")
+                continue
             if r.status != 200:
-                res.error = f"xlsx[{typ}] HTTP {r.status}"
+                type_failed = True
+                errors.append(f"xlsx[{typ}] HTTP {r.status}")
                 continue
             blob = r.body()
             (out_dir / f"dzen_{typ}.xlsx").write_bytes(blob)
@@ -64,7 +82,7 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
             for row in rows[3:]:   # [title, header, totals, посты...]
                 if len(row) <= max(COLS.values()):
                     continue
-                post = {k: int(row[i] or 0) for k, i in COLS.items()}
+                post = {k: int(float(row[i] or 0)) for k, i in COLS.items()}
                 post["title"] = row[2] if len(row) > 2 else ""
                 post["type"] = typ
                 posts.append(post)
@@ -74,6 +92,12 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
         res.metrics = {**totals, "posts_count": len(posts)}
         res.metrics["posts"] = posts
         res.source = "xlsx"
+        if errors:
+            res.error = "; ".join(errors)
+        if type_failed:
+            # Часть типов (article/brief) не собралась — метрики неполные,
+            # даже если по другому типу данные есть и status остаётся "ok".
+            res.needs_review = True
 
         # Подписчики — с публичной страницы канала (по спеке)
         from vision import parse_metric_value
