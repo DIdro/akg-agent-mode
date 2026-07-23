@@ -63,9 +63,11 @@ def _period_matches(wanted: str, actual: str) -> bool:
 
 
 def _dashboard_load_failed(page) -> bool:
-    """ВК иногда рендерит явный баннер отказа вместо данных (перегрузка/rate-limit
-    на его стороне) — отличаем это от "просто ещё грузится", чтобы не врать в
-    res.error про несовпадение периода, когда на деле данные не пришли вовсе."""
+    """ВК рендерит баннер «Не удалось загрузить данные» — но, как показала живая
+    проверка, это ПРОМЕЖУТОЧНОЕ состояние загрузки: он висит первые несколько
+    секунд и сменяется данными к ~8с. Поэтому баннер сам по себе НЕ повод
+    сдаваться — трактуем его как отказ только если данные не пришли и после
+    всех ретраёв ожидания (см. _shoot_and_extract)."""
     try:
         return page.get_by_text("Не удалось загрузить данные", exact=False).count() > 0
     except Exception:
@@ -73,58 +75,32 @@ def _dashboard_load_failed(page) -> bool:
 
 
 def _shoot_and_extract(page, shot_path: Path, expected: dict) -> tuple[dict, bool, bool]:
-    """Скриншот + vision с ретраями: время прогрузки дашборда ВК ощутимо
-    "плавает" от вкладки к вкладке (иногда «Сообщество» с 7 графиками готова
-    за 3с, иногда «Посты» ещё крутит спиннер и через 8с) — вместо гадания с
-    одним фиксированным sleep пробуем несколько раз с растущей паузой.
-    Третий элемент — сработал ли явный баннер отказа ВК."""
+    """Скриншот + vision с ретраями: дашборд ВК на старте показывает баннер
+    «Не удалось загрузить данные», а сами цифры дорисовывает к ~8с (живая
+    проверка). Поэтому НЕ бросаем на баннере — проходим все ступени ожидания,
+    пока не увидим метрики. load_failed=True только если после последней
+    попытки метрик по-прежнему нет и баннер всё ещё висит.
+    Третий элемент результата — сработал ли (устойчивый) баннер отказа ВК."""
     metrics, needs_review = {k: None for k in expected}, True
-    load_failed = False
-    for wait_ms in (3000, 5000, 8000):
+    waits = (4000, 5000, 6000, 8000)
+    for i, wait_ms in enumerate(waits):
         page.wait_for_timeout(wait_ms)
         page.screenshot(path=str(shot_path), full_page=True)
         metrics, needs_review = extract_metrics(shot_path, expected)
         if any(v is not None for v in metrics.values()):
-            load_failed = False
-            break
-        load_failed = _dashboard_load_failed(page)
-        if load_failed:
-            break  # баннер отказа не исчезнет от ожидания — не жжём вызовы vision зря
-    return metrics, needs_review, load_failed
+            return metrics, needs_review, False
+        # данных пока нет — просто ждём ещё; баннер на ранних итерациях
+        # ожидаем и игнорируем (он транзиентный)
+    # все ступени пройдены, метрик так и нет — теперь баннер значим
+    return metrics, needs_review, _dashboard_load_failed(page)
 
 
-# VK-клиент на каждой полной загрузке дашборда параллельно дёргает десятки
-# несвязанных со статистикой ручек (мессенджер, стикеры, аватарки, реклама,
-# подсказки) — это легко упирается в собственный rate-limit ВК
-# ("Too many requests per second") и мешает как раз нужному getOwnerStats.
-# Блокируем этот шум на уровне запросов страницы — статистике он не нужен.
-#
-# ВАЖНО: statsDashboard.* (getOwnerStats/getDashboardSections/getBootstrapData)
-# и batch.call НИКОГДА не блокируются — это либо сама нужная статистика, либо
-# может её нести (батч рискованно фильтровать по имени метода). Список ниже —
-# только те методы, что реально видели в разведке как чистый шум.
-_NOISE_PATTERNS = (
-    "method/stickers.", "method/messages.", "method/vmoji.",
-    "method/queue.subscribe", "method/store.hasNewItems", "queuev4",
-)
-
-
-def _is_noise(url: str) -> bool:
-    """Чистая проверка: блокировать ли запрос как несвязанный со статистикой шум.
-    statsDashboard.* и batch.call — защищены (никогда не блокируются), т.к. это
-    сама нужная статистика или может её нести."""
-    if "statsDashboard" in url:
-        return False
-    if "batch.call" in url:
-        return False
-    return any(p in url for p in _NOISE_PATTERNS)
-
-
-def _block_noise(route):
-    if _is_noise(route.request.url):
-        route.abort()
-    else:
-        route.continue_()
+# NB: раньше здесь стоял request-фильтр (page.route), блокировавший «шумные»
+# запросы ВК (мессенджер/стикеры/аватарки) — задумывался как защита от
+# собственного rate-limit ВК. Живая проверка 2026-07-24 показала обратное:
+# именно он обрывал инициализацию SPA-дашборда, из-за чего ВК стабильно
+# отдавал баннер «Не удалось загрузить данные» (ложно похожий на rate-limit).
+# Без фильтра дашборд грузится штатно за ~8с. Фильтр удалён.
 
 
 def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
@@ -135,7 +111,6 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
     screen = config.CHANNELS["vk"]["screen_name"]
     base = f"https://vk.ru/groups/dashboard/@{screen}"
     page = ctx.new_page()
-    page.route("https://web.api.vk.ru/**", _block_noise)
     warnings = []
     try:
         # У nppsatek нет вкладки «Канал» (VK Видео-канал) — фиксируем None,
