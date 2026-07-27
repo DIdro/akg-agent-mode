@@ -13,8 +13,10 @@ from playwright.sync_api import sync_playwright
 import config
 from core.browser import open_profile
 from core.period import last_completed_week, parse_week
+from core.registry_rows import to_registry_rows
 from core.report import render_console, write_summary_csv, write_summary_md
 from core.result import ChannelResult, write_result
+from core.webhook import post_rows
 
 
 def do_login() -> None:
@@ -82,6 +84,17 @@ def main() -> int:
     write_summary_md(results, week, start, end, out_dir)
     csv_path = write_summary_csv(results, week, out_dir)
     print(f"Сводка: {csv_path.parent / 'summary.md'} · {csv_path}")
+
+    # Отправка строк в Реестр_факта, если настроен вебхук
+    if config.WEBHOOK_URL:
+        rows = to_registry_rows(results, week, start, end)
+        if rows:
+            ok, msg = post_rows(config.WEBHOOK_URL, config.WEBHOOK_KEY, week, rows)
+            print(f"\nОтправка в Реестр_факта: {'ok' if ok else 'СБОЙ'} "
+                  f"({len(rows)} строк) — {msg}")
+        else:
+            print("\nОтправка в Реестр_факта: нет строк (нет каналов в статусе ok)")
+
     return 0 if all(r.status == "ok" for r in results) else 1
 
 
