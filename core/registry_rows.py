@@ -38,7 +38,7 @@ def _vk_rows(res, reg: dict, week, ws) -> list[dict]:
         reach = m.get(reach_key)
         if reach is None:
             continue
-        rows.append({
+        row = {
             "week_start": ws, "channel": reg[reg_key], "week": week,
             "reach": int(reach),
             "subs_social": None if subs_key is None or m.get(subs_key) is None
@@ -46,7 +46,12 @@ def _vk_rows(res, reg: dict, week, ws) -> list[dict]:
             "comment": (f"просмотры контента {m.get('content_views', '—')}; период {week}"
                         if reg_key == "community" else f"период {week}"),
             "source": "agent-mode", "_needs_review": bool(res.needs_review),
-        })
+        }
+        # ВК members — текущее число участников (не прирост): дельту считает
+        # серверная нода из истории. Дзен/Тенчат subs — уже прирост за период.
+        if reg_key == "community" and row["subs_social"] is not None:
+            row["subs_absolute"] = True
+        rows.append(row)
     return rows
 
 

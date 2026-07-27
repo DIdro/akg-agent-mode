@@ -44,6 +44,9 @@ def test_vk_expands_into_three_channels():
     assert by["Корп. ВК-сообщество"]["reach"] == 5      # охват контента
     assert by["Корп. ВК блог"]["reach"] == 12           # просмотры канала
     assert by["Корп. ВК-видео"]["reach"] == 3           # просмотры видео
+    # members сообщества — абсолютное число, нода посчитает Δ
+    assert by["Корп. ВК-сообщество"]["subs_absolute"] is True
+    assert "subs_absolute" not in by["Корп. ВК блог"]
 
 
 def test_vk_skips_empty_subtab():
