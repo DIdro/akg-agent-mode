@@ -61,17 +61,37 @@ curl -s 'http://127.0.0.1:8088/webhook/akg-report-rows?key=<SHARED_KEY>&week=202
 
 Деплой правок server.js/Dockerfile/compose — тот же rebuild: `docker compose build && up -d`.
 
-**Проверено 2026-07-28:** эндпоинт `{ok:true, generated:true, sent:false}` (генерация
-PDF+upload работает; sent=false пока SMTP-креды в .report_env — плейсхолдеры). ssh
-из контейнера→178 ок. bad key → unauthorized.
+**Проверено 2026-07-28 (полный сквозной путь):** эндпоинт `generate-report` →
+ssh 5.187→178 → генерация PDF + upload + SMTP-отправка. 4/4 прогона
+`{ok:true, generated:true, sent:true, MINI=1}`. SMTP-ящик `gmdidro@gmail.com`
+(Gmail app-password в `178:.report_env`, chmod 600). Отправка изолированно
+(`send_report.py`) тоже `SENT=1`. bad key → unauthorized.
+
+### Корневая причина флапа и её фикс (2026-07-28)
+Симптом: случайные `ERROR=make_report` / `no_detailed_pdf` / `MINI=0`.
+Диагноз: `make_report`, `send_report` и проверка storage все ходят на
+`STORAGE_URL=https://n8n.crm-techno.ru/native/webhook/akg-owner-report`, а
+**резолвер 178 (systemd-resolved) периодически даёт SERVFAIL на домене
+crm-techno.ru** → любое обращение к storage случайно падает. Это НЕ разные
+ошибки, а одна.
+Фикс: `n8n.crm-techno.ru` прибит к IP в `/etc/hosts` на 178 (домен указывает на
+тот же прод-натив 5.187.1.162):
+```
+5.187.1.162 n8n.crm-techno.ru  # AKG storage: обход флапающего резолвера 178
+```
+После этого 5/5 резолвов стабильны, эндпоинт 4/4 успешен. Бэкап хостов —
+`/etc/hosts.bak-*`. Дополнительно в `gen_and_send.sh` — ретрай генерации×3 с
+проверкой, что PDF реально лёг в storage (страховка на случай других сбоев).
 
 **Осталось (не под нашим контролем):**
-- Реальные SMTP-креды другого ящика + email получателя → `178:.report_env` (для sent=1).
-- Снять cron `run_weekly.sh` на 178 — ТОЛЬКО когда отправка заработает (страховка).
 - Отключить Apps Script trigger `sendOwnerReportWeekly` — **Маша/Ирина** (Google
-  `summonerx222`), иначе дубль-отправка. До отключения — риск дублей.
-- ⚠️ DNS-флап на 178 (резолв crm-techno для inject/upload) периодически роняет
-  генерацию (`ERROR=make_report`) — повторить вызов; при частоте — добавить ретрай.
+  `summonerx222`). ⚠️ ВАЖНО: storage теперь наполняется PDF при каждом прогоне
+  Анны, поэтому старый триггер, найдя PDF за текущую неделю, ОТПРАВИТ дубль
+  собственнику. Отключить обязательно.
+- Боевой email получателя (Ирина) → `REPORT_TO` в `178:.report_env` (сейчас там
+  тестовый `gmdidro@gmail.com`).
+
+**Сделано:** cron `run_weekly.sh` на 178 снят (бэкап `~/AKG/crontab.bak-*`).
 
 ## Проверено на проде (2026-07-27)
 
