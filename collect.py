@@ -15,6 +15,7 @@ from core.browser import open_profile
 from core.period import last_completed_week, parse_week
 from core.registry_rows import to_registry_rows
 from core.report import render_console, write_summary_csv, write_summary_md
+from core.report_trigger import trigger_report
 from core.result import ChannelResult, write_result
 from core.webhook import post_rows
 
@@ -52,11 +53,22 @@ def main() -> int:
     ap.add_argument("--week", default=None, help="напр. 2026-W30")
     ap.add_argument("--vk-account", default=None,
                     help="аккаунт ВК из config accounts (напр. 1 или 2)")
+    ap.add_argument("--report", action="store_true",
+                    help="сформировать и отправить PDF-отчёт (через native-эндпоинт)")
     args = ap.parse_args()
 
     if args.login:
         do_login()
         return 0
+
+    if args.report:
+        if not config.REPORT_URL:
+            print("AKG_REPORT_URL не задан — некуда слать команду отчёта")
+            return 1
+        week, start, end = parse_week(args.week) if args.week else last_completed_week()
+        ok, msg = trigger_report(config.REPORT_URL, config.WEBHOOK_KEY, week)
+        print(f"Отчёт {week}: {'ok' if ok else 'СБОЙ'} — {msg}")
+        return 0 if ok else 1
 
     names = list(config.CHANNELS) if args.all else [
         c.strip() for c in args.channels.split(",") if c.strip()]

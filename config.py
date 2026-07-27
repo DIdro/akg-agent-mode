@@ -34,6 +34,7 @@ LOGIN_TABS = [
 # Отправка строк в «Реестр_факта» (native-эндпоинт агента). None = не отправлять.
 WEBHOOK_URL = os.environ.get("AKG_WEBHOOK_URL")   # напр. https://n8n.crm-techno.ru/native/webhook/agent-metrics
 WEBHOOK_KEY = os.environ.get("AKG_WEBHOOK_KEY")   # секрет ?key=
+REPORT_URL  = os.environ.get("AKG_REPORT_URL")    # напр. https://n8n.crm-techno.ru/native/webhook/generate-report
 
 # Имена каналов в колонке F «Канал (детальный)» реестра.
 # dzen/tenchat — одна строка; vk — несколько (вкладки → разные каналы реестра).
