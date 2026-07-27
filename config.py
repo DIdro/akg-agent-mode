@@ -31,8 +31,23 @@ LOGIN_TABS = [
     "https://tenchat.ru/auth",
 ]
 
+# Отправка строк в «Реестр_факта» (native-эндпоинт агента). None = не отправлять.
+WEBHOOK_URL = os.environ.get("AKG_WEBHOOK_URL")   # напр. https://n8n.crm-techno.ru/native/webhook/agent-metrics
+WEBHOOK_KEY = os.environ.get("AKG_WEBHOOK_KEY")   # секрет ?key=
+
+# Имена каналов в колонке F «Канал (детальный)» реестра.
+# dzen/tenchat — одна строка; vk — несколько (вкладки → разные каналы реестра).
+CHANNELS["dzen"]["registry"] = "Корп. блог Дзен"
+CHANNELS["vk"]["registry"] = {
+    "community": "Корп. ВК-сообщество",
+    "channel":   "Корп. ВК блог",
+    "video":     "Корп. ВК-видео",
+}
+CHANNELS["tenchat"]["registry"] = "Тенчат ЛБ"
+
 # Локальный оверрайд (config_local.py — вне git): путь к браузеру, кабинеты
-# клиента, login-вкладки. Всё, что задано там, переопределяет дефолты выше.
+# клиента, login-вкладки, registry-имена, WEBHOOK_URL/KEY. Всё, что задано
+# там, переопределяет дефолты выше.
 try:
     from config_local import *  # noqa: F401,F403
 except ImportError:

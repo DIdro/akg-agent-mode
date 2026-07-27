@@ -32,3 +32,21 @@ LOGIN_TABS = [
     "https://vk.ru/agcapital",
     "https://tenchat.ru/auth",
 ]
+
+# --- Запись в Реестр_факта (опционально) ---
+# Куда агент шлёт готовые строки. Секрет — через env (не в git):
+#   $env:AKG_WEBHOOK_URL = "https://n8n.crm-techno.ru/native/webhook/agent-metrics"
+#   $env:AKG_WEBHOOK_KEY = "<секрет>"
+# либо задать здесь (config_local.py вне git):
+# WEBHOOK_URL = "https://n8n.crm-techno.ru/native/webhook/agent-metrics"
+# WEBHOOK_KEY = "..."
+
+# Имена каналов в колонке F «Канал (детальный)» реестра клиента.
+# dzen/tenchat — строка; vk — dict по вкладкам (сообщество/блог/видео).
+# CHANNELS["dzen"]["registry"] = "Корп. блог Дзен"        # или "Дзен ЛБ"
+# CHANNELS["vk"]["registry"] = {
+#     "community": "Корп. ВК-сообщество",  # или "ВК ЛБ"
+#     "channel":   "Корп. ВК блог",
+#     "video":     "Корп. ВК-видео",
+# }
+# CHANNELS["tenchat"]["registry"] = "Тенчат ЛБ"
