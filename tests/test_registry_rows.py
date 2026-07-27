@@ -64,6 +64,18 @@ def test_tenchat_marks_period_in_comment():
     assert t["_needs_review"] is True
 
 
+def test_vk_uses_account_registry_override():
+    r = _vk_ok()
+    r.registry_override = {"community": "ВК ЛБ"}   # аккаунт 2 (только сообщество)
+    r.metrics = {"content_reach": 17, "content_views": 40, "members": 5,
+                 "channel_views": None, "video_views": None}
+    rows = to_registry_rows([r], "2026-W29", date(2026, 7, 13), date(2026, 7, 19))
+    assert rows[0]["channel"] == "ВК ЛБ"
+    assert rows[0]["reach"] == 17
+    # channel/video = None → строк «Корп. ВК блог»/«Корп. ВК-видео» нет
+    assert not any(x["channel"] == "Корп. ВК блог" for x in rows)
+
+
 def test_failed_channel_produces_no_rows():
     rows = to_registry_rows([_failed()], "2026-W29", date(2026, 7, 13), date(2026, 7, 19))
     assert rows == []

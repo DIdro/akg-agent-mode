@@ -35,6 +35,8 @@ def _vk_rows(res, reg: dict, week, ws) -> list[dict]:
     ]
     rows = []
     for reach_key, reg_key, subs_key in specs:
+        if reg_key not in reg:      # у аккаунта нет такого канала (напр. ЛБ — только community)
+            continue
         reach = m.get(reach_key)
         if reach is None:
             continue
@@ -76,7 +78,10 @@ def to_registry_rows(results, week: str, start, end) -> list[dict]:
     for res in results:
         if res.status != "ok":
             continue
-        reg = config.CHANNELS.get(res.channel, {}).get("registry")
+        # Для ВК с несколькими аккаунтами имена берутся из выбранного аккаунта
+        # (registry_override), иначе — из общего config.
+        reg = getattr(res, "registry_override", None) \
+            or config.CHANNELS.get(res.channel, {}).get("registry")
         if reg is None:
             continue
         if res.channel == "dzen":

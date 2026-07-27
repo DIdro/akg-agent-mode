@@ -28,18 +28,20 @@ def do_login() -> None:
         ctx.pages[0].wait_for_event("close", timeout=0)
 
 
-def run_channel(name: str, ctx, week, start, end) -> ChannelResult:
+def run_channel(name: str, ctx, week, start, end, vk_account=None) -> ChannelResult:
     # импорт внутри: падение одного модуля не валит остальные
     if name == "dzen":
         from channels.dzen import collect as fn
+        return fn(ctx, week=week, start=start, end=end, out_dir=config.OUT_DIR / week)
     elif name == "vk":
         from channels.vk import collect as fn
+        return fn(ctx, week=week, start=start, end=end,
+                  out_dir=config.OUT_DIR / week, account=vk_account)
     elif name == "tenchat":
         from channels.tenchat import collect as fn
+        return fn(ctx, week=week, start=start, end=end, out_dir=config.OUT_DIR / week)
     else:
         raise ValueError(f"unknown channel {name}")
-    return fn(ctx, week=week, start=start, end=end,
-              out_dir=config.OUT_DIR / week)
 
 
 def main() -> int:
@@ -48,6 +50,8 @@ def main() -> int:
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--channels", default="")
     ap.add_argument("--week", default=None, help="напр. 2026-W30")
+    ap.add_argument("--vk-account", default=None,
+                    help="аккаунт ВК из config accounts (напр. 1 или 2)")
     args = ap.parse_args()
 
     if args.login:
@@ -68,7 +72,7 @@ def main() -> int:
         ctx = open_profile(pw)
         for name in names:
             try:
-                res = run_channel(name, ctx, week, start, end)
+                res = run_channel(name, ctx, week, start, end, vk_account=args.vk_account)
             except Exception as e:                      # канал упал — фиксируем и едем дальше
                 traceback.print_exc()
                 res = ChannelResult(

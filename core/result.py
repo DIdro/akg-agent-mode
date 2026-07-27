@@ -18,6 +18,9 @@ class ChannelResult:
     needs_review: bool = False
     error: str | None = None
     collected_at: str = ""
+    # Для ВК: registry-имена выбранного аккаунта (--vk-account); переопределяет
+    # config.CHANNELS["vk"]["registry"] при маппинге в строки реестра.
+    registry_override: dict | None = None
 
 
 def write_result(res: ChannelResult, out_dir: Path) -> Path:

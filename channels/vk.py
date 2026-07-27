@@ -137,12 +137,20 @@ def _set_period(page, start, end) -> bool:
         return False
 
 
-def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
+def collect(ctx, week, start, end, out_dir: Path, account=None) -> ChannelResult:
     res = ChannelResult(channel="vk", week=week,
                         period_from=start.isoformat(), period_to=end.isoformat(),
                         source="vision")
     out_dir.mkdir(parents=True, exist_ok=True)
-    screen = config.CHANNELS["vk"]["screen_name"]
+    # Несколько аккаунтов клиента: --vk-account N выбирает сообщество и его
+    # registry-имена. Без account — прежнее поведение (один screen_name).
+    accounts = config.CHANNELS["vk"].get("accounts")
+    if account is not None and accounts:
+        acc = accounts[str(account)]
+        screen = acc["screen"]
+        res.registry_override = acc["registry"]
+    else:
+        screen = config.CHANNELS["vk"]["screen_name"]
     base = f"https://vk.ru/groups/dashboard/@{screen}"
     page = ctx.new_page()
     warnings = []
