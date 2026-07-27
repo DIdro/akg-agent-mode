@@ -56,10 +56,12 @@ def _read_period_text(page) -> str:
 
 def _period_matches(wanted: str, actual: str) -> bool:
     """Совпадает ли запрошенный период (например «13.07–19.07») с тем, что
-    реально показано в шапке дашборда (нормализуем дефис/en-dash)."""
+    реально показано в шапке дашборда. Нормализуем дефис/en-dash И пробелы —
+    ВК рисует «13.07 – 19.07» (с пробелами), wanted идёт без них."""
     if not actual:
         return False
-    return wanted in actual.replace("-", "–")
+    norm = lambda s: s.replace("-", "–").replace(" ", "")
+    return norm(wanted) in norm(actual)
 
 
 def _dashboard_load_failed(page) -> bool:
@@ -103,6 +105,38 @@ def _shoot_and_extract(page, shot_path: Path, expected: dict) -> tuple[dict, boo
 # Без фильтра дашборд грузится штатно за ~8с. Фильтр удалён.
 
 
+def _set_period(page, start, end) -> bool:
+    """Выставить период дашборда = [start, end] через датапикер.
+
+    Датапикер (разведка 2026-07-25): клик по тексту периода в шапке → панель с
+    двумя календарями, полем диапазона и кнопкой «Показать». Пресеты («Прошлая
+    неделя») НЕнадёжны — ВК считает «сегодня» по своему ТЗ и даёт не ту неделю;
+    текстовый ввод не активирует «Показать». Рабочий путь — клик по дню начала и
+    дню конца в календаре (левый календарь = текущий месяц; для недавней недели
+    оба дня видны). «Показать» активируется только при валидном диапазоне.
+    Возвращает True, если удалось нажать «Показать»; вызывающий сверяет
+    фактический период (_period_matches) и при несовпадении помечает needs_review."""
+    try:
+        cur = _read_period_text(page)
+        if not cur:
+            return False
+        page.get_by_text(cur, exact=False).first.click(timeout=5000)
+        page.wait_for_timeout(1500)
+        # Клик по дню начала и дню конца (.first = левый/текущий календарь в DOM).
+        page.get_by_text(str(start.day), exact=True).first.click(timeout=3000)
+        page.wait_for_timeout(400)
+        page.get_by_text(str(end.day), exact=True).first.click(timeout=3000)
+        page.wait_for_timeout(600)
+        show = page.get_by_text("Показать", exact=True).first
+        if show.count() and show.is_enabled():
+            show.click(timeout=3000)
+            page.wait_for_timeout(3000)
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
     res = ChannelResult(channel="vk", week=week,
                         period_from=start.isoformat(), period_to=end.isoformat(),
@@ -128,6 +162,10 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
                 res.status = "auth_required"
                 res.error = "Сессия ВК истекла — запустите collect.py --login"
                 return res
+            # Выставляем точную отчётную неделю через датапикер (пресет
+            # «Прошлая неделя» покрывает дефолтный запуск). Успех сверяем ниже
+            # по actual_period; при несовпадении — needs_review + пометка.
+            _set_period(page, start, end)
             actual_period = _read_period_text(page)
         except Exception as e:
             # Бутстрап-навигация упала (таймаут под rate-limit и т.п.), но это

@@ -7,6 +7,11 @@ def test_period_matches_equal_range():
     assert _period_matches("13.07–19.07", "13.07-19.07") is True
 
 
+def test_period_matches_with_spaces_around_dash():
+    # ВК рисует период с пробелами вокруг тире, wanted — без них.
+    assert _period_matches("13.07–19.07", "13.07 – 19.07") is True
+
+
 def test_period_matches_different_range():
     assert _period_matches("13.07–19.07", "17.07–23.07") is False
 
