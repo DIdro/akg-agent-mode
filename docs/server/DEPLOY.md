@@ -45,6 +45,34 @@ curl -s 'http://127.0.0.1:8088/webhook/akg-report-rows?key=<SHARED_KEY>&week=202
 Восстановить `server.js` и `Pull_+_map…js` из `.bak-*`, `docker compose build && up -d`.
 Либо очистить `agent_rows` (POST rows:[]) — замещение отключится, собственный сбор вернётся.
 
+## Отчёт по команде + ВК 2 аккаунта (2026-07-28)
+
+Файлы (зеркала здесь, реальные секреты — на серверах):
+- `send_report.py` → `178:~/AKG/owner-report-pipeline/` — SMTP-отправка PDF из storage.
+  Креды в `178:~/AKG/owner-report-pipeline/.report_env` (chmod 600, вне git):
+  SMTP_HOST/PORT/USER/PASS/FROM, REPORT_TO, REPORT_CC, SHARED_KEY, STORAGE_URL.
+- `gen_and_send.sh` → `178:~/AKG/owner-report-pipeline/` — обёртка: inject_week +
+  make_report --upload + send_report. Печатает `GENERATED=1 SENT=1`.
+- `generate-report.route.js` — роут в `5.187:/opt/akg-native/server.js` (первым в
+  STORAGE_ROUTES): `POST /webhook/generate-report?key=` `{week, test_to?}` → ssh
+  5.187→178 → gen_and_send.sh. Требует: openssh-client в образе (Dockerfile
+  `apk add openssh-client`), монтирование `/root/.ssh:/root/.ssh:ro` (compose),
+  ssh-ключ 5.187→178 (в authorized_keys mariiastar@178).
+
+Деплой правок server.js/Dockerfile/compose — тот же rebuild: `docker compose build && up -d`.
+
+**Проверено 2026-07-28:** эндпоинт `{ok:true, generated:true, sent:false}` (генерация
+PDF+upload работает; sent=false пока SMTP-креды в .report_env — плейсхолдеры). ssh
+из контейнера→178 ок. bad key → unauthorized.
+
+**Осталось (не под нашим контролем):**
+- Реальные SMTP-креды другого ящика + email получателя → `178:.report_env` (для sent=1).
+- Снять cron `run_weekly.sh` на 178 — ТОЛЬКО когда отправка заработает (страховка).
+- Отключить Apps Script trigger `sendOwnerReportWeekly` — **Маша/Ирина** (Google
+  `summonerx222`), иначе дубль-отправка. До отключения — риск дублей.
+- ⚠️ DNS-флап на 178 (резолв crm-techno для inject/upload) периодически роняет
+  генерацию (`ERROR=make_report`) — повторить вызов; при частоте — добавить ретрай.
+
 ## Проверено на проде (2026-07-27)
 
 - agent-metrics принимает/отклоняет по ключу; кладёт в `global.agent_rows`.
