@@ -46,16 +46,17 @@ LOGIN_TABS = [
 # CHANNELS["dzen"]["registry"] = "Корп. блог Дзен"        # или "Дзен ЛБ"
 # CHANNELS["tenchat"]["registry"] = "Тенчат ЛБ"
 
-# --- ВК: несколько аккаунтов клиента (--vk-account N) ---
-# У клиента два ВК-сообщества под разными аккаунтами. Анна собирает по одному
-# с перелогином: collect.py --channels vk --vk-account 1, затем ...--vk-account 2.
-# У каждого аккаунта — свои сообщества и их registry-имена (колонка F).
-# CHANNELS["vk"]["accounts"] = {
-#     "1": {"screen": "agcapital",
-#           "registry": {"community": "Корп. ВК-сообщество",
-#                        "channel": "Корп. ВК блог", "video": "Корп. ВК-видео"}},
-#     "2": {"screen": "irina.ekimovskih",
-#           "registry": {"community": "ВК ЛБ"}},  # у ЛБ обычно только сообщество
+# --- ВК: несколько сообществ ОДНОГО аккаунта (--channels vk) ---
+# У клиента один ВК-аккаунт админит два сообщества — перелогин НЕ нужен, оба
+# собираются за один заход `collect.py --channels vk`. У каждого сообщества —
+# свой screen (vk.ru/<screen>) и свои registry-имена (колонка F). Ключ словаря
+# произвольный (используется для --vk-community <ключ>, чтобы перезапустить одно).
+# CHANNELS["vk"]["communities"] = {
+#     "corp": {"screen": "agcapital",
+#              "registry": {"community": "Корп. ВК-сообщество",
+#                           "channel": "Корп. ВК блог", "video": "Корп. ВК-видео"}},
+#     "invest": {"screen": "<screen-2>",           # уточнить vk.ru/<screen> сообщества
+#                "registry": {"community": "Бизнес как инвестиции"}},  # обычно только сообщество
 # }
 
 # --- Дзен: несколько кабинетов клиента (--dzen-account N) ---

@@ -29,19 +29,21 @@ def do_login() -> None:
         ctx.pages[0].wait_for_event("close", timeout=0)
 
 
-def run_channel(name: str, ctx, week, start, end, vk_account=None, dzen_account=None) -> ChannelResult:
-    # импорт внутри: падение одного модуля не валит остальные
+def run_channel(name: str, ctx, week, start, end,
+                vk_community=None, dzen_account=None) -> list[ChannelResult]:
+    # импорт внутри: падение одного модуля не валит остальные.
+    # Возвращаем список: ВК за один заход может дать несколько сообществ.
     if name == "dzen":
         from channels.dzen import collect as fn
-        return fn(ctx, week=week, start=start, end=end,
-                  out_dir=config.OUT_DIR / week, account=dzen_account)
+        return [fn(ctx, week=week, start=start, end=end,
+                   out_dir=config.OUT_DIR / week, account=dzen_account)]
     elif name == "vk":
-        from channels.vk import collect as fn
-        return fn(ctx, week=week, start=start, end=end,
-                  out_dir=config.OUT_DIR / week, account=vk_account)
+        from channels.vk import collect_all
+        return collect_all(ctx, week=week, start=start, end=end,
+                           out_dir=config.OUT_DIR / week, only=vk_community)
     elif name == "tenchat":
         from channels.tenchat import collect as fn
-        return fn(ctx, week=week, start=start, end=end, out_dir=config.OUT_DIR / week)
+        return [fn(ctx, week=week, start=start, end=end, out_dir=config.OUT_DIR / week)]
     else:
         raise ValueError(f"unknown channel {name}")
 
@@ -52,8 +54,9 @@ def main() -> int:
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--channels", default="")
     ap.add_argument("--week", default=None, help="напр. 2026-W30")
-    ap.add_argument("--vk-account", default=None,
-                    help="аккаунт ВК из config accounts (напр. 1 или 2)")
+    ap.add_argument("--vk-community", default=None,
+                    help="собрать только одно ВК-сообщество из config communities "
+                         "(ключ); по умолчанию — все сообщества за один заход")
     ap.add_argument("--dzen-account", default=None,
                     help="кабинет Дзена из config accounts (напр. 1 или 2)")
     ap.add_argument("--report", action="store_true",
@@ -87,16 +90,17 @@ def main() -> int:
         ctx = open_profile(pw)
         for name in names:
             try:
-                res = run_channel(name, ctx, week, start, end,
-                                  vk_account=args.vk_account, dzen_account=args.dzen_account)
+                batch = run_channel(name, ctx, week, start, end,
+                                    vk_community=args.vk_community, dzen_account=args.dzen_account)
             except Exception as e:                      # канал упал — фиксируем и едем дальше
                 traceback.print_exc()
-                res = ChannelResult(
+                batch = [ChannelResult(
                     channel=name, week=week,
                     period_from=start.isoformat(), period_to=end.isoformat(),
-                    status="failed", error=f"{type(e).__name__}: {e}")
-            write_result(res, out_dir)
-            results.append(res)
+                    status="failed", error=f"{type(e).__name__}: {e}")]
+            for res in batch:
+                write_result(res, out_dir)
+                results.append(res)
         ctx.close()
 
     # Читаемая сводка в консоль + файлы summary.md / summary.csv

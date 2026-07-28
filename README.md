@@ -21,26 +21,30 @@ python collect.py --channels dzen,vk --week 2026-W30
 
 Результат: `out/<ISO-week>/<channel>.json` + скриншоты/xlsx.
 
-### ВК и Дзен из двух аккаунтов (перелогин)
+### Несколько сообществ/кабинетов
 
-У клиента по два кабинета в ВК и в Дзене под разными аккаунтами. Дашборд/Студия
-показывают только тот кабинет, под которым залогинен профиль, поэтому аккаунты
-собираются по одному — с ручным перелогином между заходами:
+**ВК — два сообщества, ОДИН аккаунт (перелогин не нужен).** Один ВК-аккаунт
+админит оба сообщества, поэтому `collect.py --channels vk` собирает их за один
+заход:
 
 ```
-python collect.py --channels vk   --vk-account 1     # собрать 1-й ВК-аккаунт
-#   → перелогиниться в браузере во 2-й ВК-аккаунт, затем:
-python collect.py --channels vk   --vk-account 2
+python collect.py --channels vk                    # оба сообщества сразу
+python collect.py --channels vk --vk-community corp # перезапустить одно (по ключу)
+```
 
-python collect.py --channels dzen --dzen-account 1   # собрать 1-й Дзен-кабинет
+**Дзен — два кабинета под РАЗНЫМИ Яндекс-аккаунтами (нужен перелогин).** Студия
+показывает только залогиненный кабинет, поэтому собираем по одному:
+
+```
+python collect.py --channels dzen --dzen-account 1   # 1-й Дзен-кабинет
 #   → перелогиниться в другой Яндекс-аккаунт, затем:
 python collect.py --channels dzen --dzen-account 2
 ```
 
-Кабинеты и их имена каналов в реестре задаются в `config_local.py`
-(`CHANNELS["vk"]["accounts"]`, `CHANNELS["dzen"]["accounts"]` — см.
-[config_local.example.py](config_local.example.py)). Без флага — прежнее
-одно-аккаунтное поведение.
+Сообщества/кабинеты и их имена каналов в реестре задаются в `config_local.py`
+(`CHANNELS["vk"]["communities"]`, `CHANNELS["dzen"]["accounts"]` — см.
+[config_local.example.py](config_local.example.py)). Без них — прежнее
+одиночное поведение.
 
 ## Что собирается по каналам
 

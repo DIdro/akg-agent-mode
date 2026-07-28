@@ -1,5 +1,6 @@
 """Результат сбора по одному каналу + запись в out/<week>/."""
 import json
+import re
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,15 +19,23 @@ class ChannelResult:
     needs_review: bool = False
     error: str | None = None
     collected_at: str = ""
-    # Для ВК: registry-имена выбранного аккаунта (--vk-account); переопределяет
-    # config.CHANNELS["vk"]["registry"] при маппинге в строки реестра.
-    registry_override: dict | None = None
+    # registry-имена конкретного кабинета/сообщества, переопределяют
+    # config.CHANNELS[...]["registry"] при маппинге в строки реестра:
+    #   ВК — dict по вкладкам (сообщество/блог/видео), Дзен/Тенчат — строка.
+    registry_override: dict | str | None = None
+    # Метка для различения нескольких результатов одного канала (ВК: два
+    # сообщества за один прогон) — идёт в имя файла out/ и в сводку. None —
+    # один результат на канал (прежнее поведение).
+    label: str | None = None
 
 
 def write_result(res: ChannelResult, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     if not res.collected_at:
         res.collected_at = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
-    path = out_dir / f"{res.channel}.json"
+    # Имя файла из label (если задан) — иначе несколько ВК-сообществ перетёрли бы
+    # общий vk.json. Небезопасные для ФС символы → «_».
+    stem = re.sub(r"[^\w.-]+", "_", res.label) if res.label else res.channel
+    path = out_dir / f"{stem}.json"
     path.write_text(json.dumps(asdict(res), ensure_ascii=False, indent=2), encoding="utf-8")
     return path

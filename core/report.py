@@ -35,6 +35,12 @@ LABELS = {
 _HIDE = {"posts"}
 
 
+def _name(res) -> str:
+    """Отображаемое имя: label (напр. «vk:agcapital» для конкретного
+    сообщества), иначе — канал."""
+    return res.label or res.channel
+
+
 def _metric_items(res) -> list[tuple[str, object]]:
     """Пары (подпись, значение) метрик канала в порядке словаря, без служебных."""
     out = []
@@ -57,7 +63,7 @@ def render_console(results: list, week: str, start, end, out_dir: Path) -> str:
         if res.needs_review:
             flags.append("проверить")
         flag_s = f" [{', '.join(flags)}]" if flags else ""
-        lines.append(f"\n{res.channel.upper():8s} {res.status}"
+        lines.append(f"\n{_name(res).upper():16s} {res.status}"
                      f"  (source={res.source or '—'}){flag_s}")
         for label, val in _metric_items(res):
             lines.append(f"    {label:.<28s} {_fmt(val)}")
@@ -73,7 +79,7 @@ def _rows(results: list, week: str) -> list[dict]:
     for res in results:
         for label, val in _metric_items(res):
             rows.append({
-                "Канал": res.channel,
+                "Канал": _name(res),
                 "Статус": res.status,
                 "Период": week,
                 "Метрика": label,
@@ -105,11 +111,11 @@ def write_summary_md(results: list, week: str, start, end, out_dir: Path) -> Pat
     lines.append("| Канал | Статус | Источник | Проверить |")
     lines.append("|---|---|---|---|")
     for res in results:
-        lines.append(f"| {res.channel} | {res.status} | {res.source or '—'} | "
+        lines.append(f"| {_name(res)} | {res.status} | {res.source or '—'} | "
                      f"{'да' if res.needs_review else ''} |")
     lines.append("")
     for res in results:
-        lines.append(f"## {res.channel}")
+        lines.append(f"## {_name(res)}")
         lines.append("")
         lines.append("| Метрика | Значение |")
         lines.append("|---|---|")

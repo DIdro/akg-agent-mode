@@ -137,20 +137,29 @@ def _set_period(page, start, end) -> bool:
         return False
 
 
-def collect(ctx, week, start, end, out_dir: Path, account=None) -> ChannelResult:
+def collect_all(ctx, week, start, end, out_dir: Path, only=None) -> list[ChannelResult]:
+    """Собрать ВСЕ сообщества клиента за один заход (один ВК-аккаунт админит
+    несколько сообществ — перелогин не нужен). Возвращает по ChannelResult на
+    сообщество. Конфиг: CHANNELS["vk"]["communities"] = {key: {screen, registry}}.
+    only=<key> — собрать только одно сообщество (напр. перезапуск упавшего).
+    Без communities — прежнее одно-сообщественное поведение (screen_name)."""
+    comms = config.CHANNELS["vk"].get("communities")
+    if comms:
+        items = [(k, c) for k, c in comms.items() if only in (None, k)]
+        return [_collect_one(ctx, week, start, end, out_dir,
+                             screen=c["screen"], registry_override=c["registry"],
+                             label=f"vk:{c['screen']}", shot_prefix=c["screen"])
+                for _, c in items]
+    return [_collect_one(ctx, week, start, end, out_dir,
+                         screen=config.CHANNELS["vk"]["screen_name"])]
+
+
+def _collect_one(ctx, week, start, end, out_dir: Path, screen: str,
+                 registry_override=None, label=None, shot_prefix="vk") -> ChannelResult:
     res = ChannelResult(channel="vk", week=week,
                         period_from=start.isoformat(), period_to=end.isoformat(),
-                        source="vision")
+                        source="vision", registry_override=registry_override, label=label)
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Несколько аккаунтов клиента: --vk-account N выбирает сообщество и его
-    # registry-имена. Без account — прежнее поведение (один screen_name).
-    accounts = config.CHANNELS["vk"].get("accounts")
-    if account is not None and accounts:
-        acc = accounts[str(account)]
-        screen = acc["screen"]
-        res.registry_override = acc["registry"]
-    else:
-        screen = config.CHANNELS["vk"]["screen_name"]
     base = f"https://vk.ru/groups/dashboard/@{screen}"
     page = ctx.new_page()
     warnings = []
@@ -193,9 +202,13 @@ def collect(ctx, week, start, end, out_dir: Path, account=None) -> ChannelResult
                     # Не дёргаем повторно ту же вкладку, где уже стоим
                     # (первая в TABS совпадает со стартовой страницей).
                     page.goto(url, wait_until="domcontentloaded")
-                shot = out_dir / shot_name
+                # Префикс по сообществу: два сообщества за один прогон не должны
+                # перетирать vk_community.png/… друг друга ("vk_community.png" →
+                # "<screen>_community.png"; для одиночного сбора остаётся "vk_…").
+                shot_file = f"{shot_prefix}_{shot_name.split('_', 1)[1]}"
+                shot = out_dir / shot_file
                 metrics, review, load_failed = _shoot_and_extract(page, shot, expected)
-                res.screenshots.append(shot_name)
+                res.screenshots.append(shot_file)
                 res.metrics.update(metrics)
                 res.needs_review = res.needs_review or review
                 if load_failed:
