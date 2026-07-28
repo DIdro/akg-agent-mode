@@ -57,3 +57,15 @@ LOGIN_TABS = [
 #     "2": {"screen": "irina.ekimovskih",
 #           "registry": {"community": "ВК ЛБ"}},  # у ЛБ обычно только сообщество
 # }
+
+# --- Дзен: несколько кабинетов клиента (--dzen-account N) ---
+# У клиента два Дзен-канала под разными Яндекс-аккаунтами (корп. блог + ЛБ).
+# Анна собирает по одному с перелогином: collect.py --channels dzen --dzen-account 1,
+# затем перелогин в другой Яндекс-аккаунт и ...--dzen-account 2.
+# У каждого кабинета — свой public_url (из него берётся publisherId) и своё
+# registry-имя (строка, колонка F). Логиниться нужно под аккаунтом с правами
+# редактора соответствующего канала (доступ в Студию).
+# CHANNELS["dzen"]["accounts"] = {
+#     "1": {"public_url": "https://dzen.ru/osnova_capital", "registry": "Корп. блог Дзен"},
+#     "2": {"public_url": "https://dzen.ru/ekimovskih",     "registry": "Дзен ЛБ"},
+# }

@@ -29,11 +29,12 @@ def do_login() -> None:
         ctx.pages[0].wait_for_event("close", timeout=0)
 
 
-def run_channel(name: str, ctx, week, start, end, vk_account=None) -> ChannelResult:
+def run_channel(name: str, ctx, week, start, end, vk_account=None, dzen_account=None) -> ChannelResult:
     # импорт внутри: падение одного модуля не валит остальные
     if name == "dzen":
         from channels.dzen import collect as fn
-        return fn(ctx, week=week, start=start, end=end, out_dir=config.OUT_DIR / week)
+        return fn(ctx, week=week, start=start, end=end,
+                  out_dir=config.OUT_DIR / week, account=dzen_account)
     elif name == "vk":
         from channels.vk import collect as fn
         return fn(ctx, week=week, start=start, end=end,
@@ -53,6 +54,8 @@ def main() -> int:
     ap.add_argument("--week", default=None, help="напр. 2026-W30")
     ap.add_argument("--vk-account", default=None,
                     help="аккаунт ВК из config accounts (напр. 1 или 2)")
+    ap.add_argument("--dzen-account", default=None,
+                    help="кабинет Дзена из config accounts (напр. 1 или 2)")
     ap.add_argument("--report", action="store_true",
                     help="сформировать и отправить PDF-отчёт (через native-эндпоинт)")
     args = ap.parse_args()
@@ -84,7 +87,8 @@ def main() -> int:
         ctx = open_profile(pw)
         for name in names:
             try:
-                res = run_channel(name, ctx, week, start, end, vk_account=args.vk_account)
+                res = run_channel(name, ctx, week, start, end,
+                                  vk_account=args.vk_account, dzen_account=args.dzen_account)
             except Exception as e:                      # канал упал — фиксируем и едем дальше
                 traceback.print_exc()
                 res = ChannelResult(

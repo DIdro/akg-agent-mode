@@ -19,7 +19,28 @@ python collect.py --channels dzen,vk --week 2026-W30
 всегда видимое окно (headed). Профиль изолированный: `profile/` в репо — личный
 браузер не затрагивается. `profile/` (живые сессии) и `out/` (результаты) — вне git.
 
-Результат: `out/<ISO-week>/<channel>.json` + скриншоты/xlsx. Никуда не отправляется.
+Результат: `out/<ISO-week>/<channel>.json` + скриншоты/xlsx.
+
+### ВК и Дзен из двух аккаунтов (перелогин)
+
+У клиента по два кабинета в ВК и в Дзене под разными аккаунтами. Дашборд/Студия
+показывают только тот кабинет, под которым залогинен профиль, поэтому аккаунты
+собираются по одному — с ручным перелогином между заходами:
+
+```
+python collect.py --channels vk   --vk-account 1     # собрать 1-й ВК-аккаунт
+#   → перелогиниться в браузере во 2-й ВК-аккаунт, затем:
+python collect.py --channels vk   --vk-account 2
+
+python collect.py --channels dzen --dzen-account 1   # собрать 1-й Дзен-кабинет
+#   → перелогиниться в другой Яндекс-аккаунт, затем:
+python collect.py --channels dzen --dzen-account 2
+```
+
+Кабинеты и их имена каналов в реестре задаются в `config_local.py`
+(`CHANNELS["vk"]["accounts"]`, `CHANNELS["dzen"]["accounts"]` — см.
+[config_local.example.py](config_local.example.py)). Без флага — прежнее
+одно-аккаунтное поведение.
 
 ## Что собирается по каналам
 

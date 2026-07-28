@@ -35,12 +35,23 @@ def _aggregate_posts(rows: list) -> list[dict]:
     return posts
 
 
-def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
+def collect(ctx, week, start, end, out_dir: Path, account=None) -> ChannelResult:
     res = ChannelResult(channel="dzen", week=week,
                         period_from=start.isoformat(), period_to=end.isoformat())
     out_dir.mkdir(parents=True, exist_ok=True)
-    # publisherId — из public_url в конфиге (последний сегмент пути)
-    pub = config.CHANNELS["dzen"]["public_url"].rstrip("/").rsplit("/", 1)[-1]
+    # Несколько Дзен-кабинетов клиента (напр. корп. блог + ЛБ): --dzen-account N
+    # выбирает кабинет и его registry-имя (колонка F). Аккаунты — разные Яндекс-
+    # логины, Анна собирает по одному с перелогином между заходами. Без account —
+    # прежнее поведение: один public_url, registry из общего config.
+    accounts = config.CHANNELS["dzen"].get("accounts")
+    if account is not None and accounts:
+        acc = accounts[str(account)]
+        public_url = acc["public_url"]
+        res.registry_override = acc["registry"]
+    else:
+        public_url = config.CHANNELS["dzen"]["public_url"]
+    # publisherId — из public_url (последний сегмент пути)
+    pub = public_url.rstrip("/").rsplit("/", 1)[-1]
     page = ctx.new_page()
     try:
         stat_url = (f"https://dzen.ru/profile/editor/id/{pub}/publications-stat"
@@ -105,7 +116,7 @@ def collect(ctx, week, start, end, out_dir: Path) -> ChannelResult:
         # весь блок в try/except, а не unguarded.
         try:
             from vision import parse_metric_value
-            page.goto(config.CHANNELS["dzen"]["public_url"], wait_until="domcontentloaded")
+            page.goto(public_url, wait_until="domcontentloaded")
             page.wait_for_timeout(3000)
             sub_m = re.search(r"(\d[\d.,  ]*[KkКкMmМм]?)\s*подписчик",
                               page.inner_text("body"))

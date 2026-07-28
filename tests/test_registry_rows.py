@@ -76,6 +76,17 @@ def test_vk_uses_account_registry_override():
     assert not any(x["channel"] == "Корп. ВК блог" for x in rows)
 
 
+def test_dzen_uses_account_registry_override():
+    # Второй Дзен-кабинет (ЛБ) пишется под своим именем канала (строка), а не
+    # под дефолтным «Корп. блог Дзен».
+    r = _dzen_ok()
+    r.registry_override = "Дзен ЛБ"
+    rows = to_registry_rows([r], "2026-W29", date(2026, 7, 13), date(2026, 7, 19))
+    assert rows[0]["channel"] == "Дзен ЛБ"
+    assert rows[0]["reach"] == 87
+    assert not any(x["channel"] == "Корп. блог Дзен" for x in rows)
+
+
 def test_failed_channel_produces_no_rows():
     rows = to_registry_rows([_failed()], "2026-W29", date(2026, 7, 13), date(2026, 7, 19))
     assert rows == []
