@@ -20,7 +20,10 @@ def parse_metric_value(raw: str) -> int | None:
     s = (raw or "").strip().replace("\u00a0", " ")
     if not s:
         return None
-    m = re.fullmatch(r"([\d\s]+(?:[.,]\d+)?)\s*([KkКкMmМм]?)", s)
+    # Нормализуем варианты минуса (–, —, −) к ASCII '-': метрики ВК вроде
+    # «Подписчики -4» — это прирост/убыль за период и МОГУТ быть отрицательными.
+    s = s.replace("–", "-").replace("—", "-").replace("−", "-")
+    m = re.fullmatch(r"(-?\s*[\d\s]+(?:[.,]\d+)?)\s*([KkКкMmМм]?)", s)
     if not m:
         return None
     try:
@@ -76,6 +79,8 @@ def extract_metrics(image_path: Path, expected: dict[str, str]) -> tuple[dict, b
                         "На скриншоте — вкладка статистики соцсети. Найди значения метрик:\n"
                         f"{ask}\n"
                         "Верни raw_value РОВНО как на экране (например «17,6K», «16 000»). "
+                        "Значение может быть отрицательным (прирост/убыль, например «-4») — "
+                        "обязательно сохрани знак минус. "
                         "Если метрики на скриншоте нет — found=false, raw_value=''. "
                         "Не пересчитывай и не округляй.")},
                 ],

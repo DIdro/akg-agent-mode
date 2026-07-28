@@ -28,9 +28,11 @@ def _dzen_row(res, reg, week, ws) -> dict:
 def _vk_rows(res, reg: dict, week, ws) -> list[dict]:
     m = res.metrics
     # (ключ метрики охвата, ключ канала в reg, ключ подписчиков|None)
+    # Подписчики — прирост/убыль за период (как у Дзена/Тенчата). Сообщество и
+    # видео-канал несут СВОИ дельты отдельными строками: members / channel_subs.
     specs = [
         ("content_reach", "community", "members"),
-        ("channel_views", "channel",   None),
+        ("channel_views", "channel",   "channel_subs"),
         ("video_views",   "video",     None),
     ]
     rows = []
@@ -49,10 +51,6 @@ def _vk_rows(res, reg: dict, week, ws) -> list[dict]:
                         if reg_key == "community" else f"период {week}"),
             "source": "agent-mode", "_needs_review": bool(res.needs_review),
         }
-        # ВК members — текущее число участников (не прирост): дельту считает
-        # серверная нода из истории. Дзен/Тенчат subs — уже прирост за период.
-        if reg_key == "community" and row["subs_social"] is not None:
-            row["subs_absolute"] = True
         rows.append(row)
     return rows
 

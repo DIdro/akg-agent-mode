@@ -55,8 +55,8 @@ LOGIN_TABS = [
 #     "corp": {"screen": "agcapital",
 #              "registry": {"community": "Корп. ВК-сообщество",
 #                           "channel": "Корп. ВК блог", "video": "Корп. ВК-видео"}},
-#     "invest": {"screen": "irina.ekimovskih",     # сообщество «Бизнес как инвестиции»
-#                "registry": {"community": "Бизнес как инвестиции"}},  # сверить имя в колонке F
+#     "invest": {"screen": "irina.ekimovskih",     # витрина «Бизнес как инвестиции»
+#                "registry": {"community": "ВК ЛБ"}},  # имя в колонке F реестра
 # }
 
 # --- Дзен: несколько кабинетов клиента (--dzen-account N) ---

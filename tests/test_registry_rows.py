@@ -14,7 +14,7 @@ def _vk_ok():
     return ChannelResult(channel="vk", week="2026-W29",
         period_from="2026-07-13", period_to="2026-07-19", status="ok", source="vision",
         metrics={"content_reach": 5, "content_views": 28, "members": 0,
-                 "channel_views": 12, "video_views": 3})
+                 "channel_views": 12, "video_views": 3, "channel_subs": 2})
 
 
 def _tenchat_ok():
@@ -44,9 +44,11 @@ def test_vk_expands_into_three_channels():
     assert by["Корп. ВК-сообщество"]["reach"] == 5      # охват контента
     assert by["Корп. ВК блог"]["reach"] == 12           # просмотры канала
     assert by["Корп. ВК-видео"]["reach"] == 3           # просмотры видео
-    # members сообщества — абсолютное число, нода посчитает Δ
-    assert by["Корп. ВК-сообщество"]["subs_absolute"] is True
-    assert "subs_absolute" not in by["Корп. ВК блог"]
+    # подписчики — прирост/убыль за период, отдельно по сообществу и по каналу
+    assert by["Корп. ВК-сообщество"]["subs_social"] == 0
+    assert by["Корп. ВК блог"]["subs_social"] == 2
+    assert by["Корп. ВК-видео"]["subs_social"] is None
+    assert "subs_absolute" not in by["Корп. ВК-сообщество"]
 
 
 def test_vk_skips_empty_subtab():
