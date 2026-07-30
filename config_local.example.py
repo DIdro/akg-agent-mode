@@ -33,12 +33,13 @@ LOGIN_TABS = [
     "https://tenchat.ru/auth",
 ]
 
-# --- Запись в Реестр_факта (опционально) ---
-# Куда агент шлёт готовые строки. Секрет — через env (не в git):
-#   $env:AKG_WEBHOOK_URL = "https://n8n.crm-techno.ru/native/webhook/agent-metrics"
-#   $env:AKG_WEBHOOK_KEY = "<секрет>"
+# --- Куда агент шлёт готовые строки (опционально) ---
+# Новый сервер akg-server (ingest/server.py, SQLite) на 5.187.1.162.
+# Секрет — через env (не в git):
+#   $env:AKG_WEBHOOK_URL = "http://5.187.1.162:8002/agent-metrics"
+#   $env:AKG_WEBHOOK_KEY = "<секрет AGENT_INGEST_KEY из .env сервера>"
 # либо задать здесь (config_local.py вне git):
-# WEBHOOK_URL = "https://n8n.crm-techno.ru/native/webhook/agent-metrics"
+# WEBHOOK_URL = "http://5.187.1.162:8002/agent-metrics"
 # WEBHOOK_KEY = "..."
 
 # Имена каналов в колонке F «Канал (детальный)» реестра клиента.
