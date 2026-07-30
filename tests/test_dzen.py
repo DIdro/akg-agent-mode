@@ -84,3 +84,40 @@ def test_aggregate_posts_coerces_fractional_time_min_without_crashing():
     # int(float(...)) должен обрезать его до 1, а не упасть.
     assert posts[0]["time_min"] == 1
     assert isinstance(posts[0]["time_min"], int)
+
+
+# --- publisherId из public_url / из HTML публичной страницы ---
+# Багфикс 2026-07-30: для слаговых каналов (dzen.ru/osnova_capital) последний
+# сегмент URL — НЕ publisherId; URL Студии с ним отдаёт 404. Hex-id берётся
+# либо из URL вида /id/<24hex>, либо из HTML публичной страницы.
+from channels.dzen import _pub_from_url, _extract_publisher_id
+
+
+def test_pub_from_url_hex_id():
+    assert _pub_from_url("https://dzen.ru/id/69a6a56804c3ba5d0aadf101") == \
+        "69a6a56804c3ba5d0aadf101"
+
+
+def test_pub_from_url_slug_is_none():
+    assert _pub_from_url("https://dzen.ru/osnova_capital") is None
+    assert _pub_from_url("https://dzen.ru/ekimovskih/") is None
+
+
+def test_extract_publisher_id_from_html():
+    html = ('{"logo":"https://x/pub_aaaaaaaaaaaaaaaaaaaaaaaa/z",'
+            '"publisherId":"5e00d34d43fdc000b276c171",'
+            '"publisher_id":"5e00d34d43fdc000b276c171",'
+            '"other":{"publisherId":"5e00d34d43fdc000b276c171"}}')
+    assert _extract_publisher_id(html) == "5e00d34d43fdc000b276c171"
+
+
+def test_extract_publisher_id_picks_most_frequent_key_match():
+    # чужой id (рекомендации) встречается ключом один раз, свой — чаще
+    html = ('"publisherId":"bbbbbbbbbbbbbbbbbbbbbbbb"'
+            '"publisherId":"5e00d34d43fdc000b276c171"'
+            '"publisher_id":"5e00d34d43fdc000b276c171"')
+    assert _extract_publisher_id(html) == "5e00d34d43fdc000b276c171"
+
+
+def test_extract_publisher_id_absent():
+    assert _extract_publisher_id('{"no":"ids here","pub_x":"short"}') is None
