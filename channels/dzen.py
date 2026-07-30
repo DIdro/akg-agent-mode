@@ -20,6 +20,30 @@ COLS = {"reads": 4, "shows": 5, "opens": 6, "time_min": 7,
         "comments": 8, "subs": 9, "likes": 10}
 
 
+_HEX24 = re.compile(r"^[0-9a-f]{24}$")
+# ключевые вхождения publisherId в HTML публичной страницы; айди в URL
+# аватарок/логотипов (pub_<hex>) под этот паттерн не попадают
+_PUB_KEY_RE = re.compile(r'"publisher_?[iI]d":"([0-9a-f]{24})"')
+
+
+def _pub_from_url(public_url: str) -> str | None:
+    """publisherId из public_url, если он там есть (форма /id/<24hex>).
+    Для слаговых каналов (dzen.ru/<имя>) возвращает None — слаг НЕ id:
+    URL Студии со слагом отдаёт 404 (грабли клиентского кабинета 30.07)."""
+    seg = public_url.rstrip("/").rsplit("/", 1)[-1]
+    return seg if _HEX24.match(seg) else None
+
+
+def _extract_publisher_id(html: str) -> str | None:
+    """publisherId из HTML публичной страницы канала: самый частый id среди
+    ключевых вхождений — на странице бывают чужие publisherId (рекомендации),
+    но свой встречается на порядок чаще."""
+    ids = _PUB_KEY_RE.findall(html)
+    if not ids:
+        return None
+    return max(set(ids), key=ids.count)
+
+
 def _aggregate_posts(rows: list) -> list[dict]:
     """Чистая функция: строки XLSX publications-stat -> список постов с
     числовыми метриками по COLS. rows — полный список строк листа
@@ -49,11 +73,23 @@ def collect(ctx, week, start, end, out_dir: Path, account=None) -> ChannelResult
         public_url = acc["public_url"]
         res.registry_override = acc["registry"]
     else:
-        public_url = config.CHANNELS["dzen"]["public_url"]
-    # publisherId — из public_url (последний сегмент пути)
-    pub = public_url.rstrip("/").rsplit("/", 1)[-1]
+        acc = config.CHANNELS["dzen"]
+        public_url = acc["public_url"]
     page = ctx.new_page()
     try:
+        # publisherId: явный из конфига > hex из public_url (/id/<24hex>) >
+        # авто-резолв из HTML публичной страницы (слаговые каналы).
+        pub = acc.get("publisher_id") or _pub_from_url(public_url)
+        if not pub:
+            page.goto(public_url, wait_until="domcontentloaded")
+            page.wait_for_timeout(2000)
+            pub = _extract_publisher_id(page.content())
+        if not pub:
+            res.status = "failed"
+            res.error = (f"publisherId не определён: в {public_url} нет /id/<hex>, "
+                         f"на публичной странице ключ не найден — задайте "
+                         f"publisher_id в конфиге кабинета")
+            return res
         stat_url = (f"https://dzen.ru/profile/editor/id/{pub}/publications-stat"
                     f"?statType=publications")
         page.goto(stat_url, wait_until="domcontentloaded")
