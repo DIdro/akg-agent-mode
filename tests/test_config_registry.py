@@ -1,9 +1,11 @@
 import config
 
 
-def test_webhook_defaults_none():
-    assert config.WEBHOOK_URL is None
-    assert config.WEBHOOK_KEY is None
+def test_webhook_defaults_point_to_akg_server():
+    # дефолты вшиты (демо на любой машине без настройки env);
+    # env AKG_WEBHOOK_URL/AKG_WEBHOOK_KEY переопределяют
+    assert config.WEBHOOK_URL == "http://5.187.1.162:8002/agent-metrics"
+    assert config.WEBHOOK_KEY
 
 
 def test_channels_have_registry_names():

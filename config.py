@@ -31,9 +31,14 @@ LOGIN_TABS = [
     "https://tenchat.ru/auth",
 ]
 
-# Отправка строк в «Реестр_факта» (native-эндпоинт агента). None = не отправлять.
-WEBHOOK_URL = os.environ.get("AKG_WEBHOOK_URL")   # напр. https://n8n.crm-techno.ru/native/webhook/agent-metrics
-WEBHOOK_KEY = os.environ.get("AKG_WEBHOOK_KEY")   # секрет ?key=
+# Отправка строк на akg-server (ingest, SQLite). Дефолты вшиты, чтобы сбор
+# с любой машины (ПК Анны) пушил без настройки env; env-переменные при
+# необходимости переопределяют. Ключ = AGENT_INGEST_KEY из .env сервера;
+# репо приватный — компромисс осознанный (решение Alex 02.08).
+WEBHOOK_URL = os.environ.get("AKG_WEBHOOK_URL",
+                             "http://5.187.1.162:8002/agent-metrics")
+WEBHOOK_KEY = os.environ.get("AKG_WEBHOOK_KEY",
+                             "1779f8b2e546394a6d1bef0bf0c4c835c2bfc29b0158532a")
 REPORT_URL  = os.environ.get("AKG_REPORT_URL")    # напр. https://n8n.crm-techno.ru/native/webhook/generate-report
 
 # Имена каналов в колонке F «Канал (детальный)» реестра.
