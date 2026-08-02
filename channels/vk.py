@@ -73,7 +73,9 @@ def _period_matches(wanted: str, actual: str) -> bool:
     ВК рисует «13.07 – 19.07» (с пробелами), wanted идёт без них."""
     if not actual:
         return False
-    norm = lambda s: s.replace("-", "–").replace(" ", "")
+    # \s+ вместо replace(" "): ВК отбивает даты неразрывными пробелами (\xa0),
+    # обычный replace их не убирал — ложный «период не совпал» (прецедент W31)
+    norm = lambda s: re.sub(r"\s+", "", s.replace("-", "–"))
     return norm(wanted) in norm(actual)
 
 
@@ -138,15 +140,34 @@ def _set_period(page, start, end) -> bool:
         # Клик по дню начала и дню конца (.first = левый/текущий календарь в DOM).
         page.get_by_text(str(start.day), exact=True).first.click(timeout=3000)
         page.wait_for_timeout(400)
-        page.get_by_text(str(end.day), exact=True).first.click(timeout=3000)
+        # Неделя через границу месяца (напр. 27.07–02.08): день конца лежит в
+        # ПРАВОМ календаре (следующий месяц) — .first попал бы в тот же месяц,
+        # что и начало, и ВК прочитал бы клики как диапазон «02.07–27.07»
+        # (прецедент W31). Берём последнее совпадение в DOM — ячейку правого
+        # календаря; внутри одного месяца — прежний .first.
+        end_days = page.get_by_text(str(end.day), exact=True)
+        (end_days.last if end.month != start.month else end_days.first).click(timeout=3000)
         page.wait_for_timeout(600)
         show = page.get_by_text("Показать", exact=True).first
+        clicked = False
         if show.count() and show.is_enabled():
             show.click(timeout=3000)
             page.wait_for_timeout(3000)
-            return True
-        return False
+            clicked = True
+        # Панель датапикера может остаться открытой (диапазон ВК применяет уже
+        # по кликам на датах, а клик «Показать» иногда не долетает) — тогда она
+        # перекрывает плитки метрик на скриншоте и vision их не видит
+        # (прецедент W31). Esc только прячет попап, применённый период не
+        # откатывает — закрываем безусловно.
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(800)
+        return clicked
     except Exception:
+        try:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(800)
+        except Exception:
+            pass
         return False
 
 
